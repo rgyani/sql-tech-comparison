@@ -107,3 +107,6 @@ As we saw earlier, Postgres has great support for extensions.
 TimescaleDB scales PostgreSQL for time-series data via automatic partitioning across time and space (partitioning key), yet retains the standard PostgreSQL interface.
 
 In other words, TimescaleDB exposes what look like regular tables, but are actually only an abstraction (or a virtual view) of many individual tables comprising the actual data. This single-table view, which they call a **hypertable**, is comprised of many chunks, which are created by partitioning the hypertable's data in either one or two dimensions: by a time interval, and by an (optional) "partition key" such as device id, location, user id, etc.
+
+## "Postgres is eating the database world"
+Do read for an opinionated sales pitch for Postgres [https://pigsty.io/blog/pg/pg-eat-db-world/](https://pigsty.io/blog/pg/pg-eat-db-world/)
