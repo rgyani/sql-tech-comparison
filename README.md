@@ -110,3 +110,16 @@ In other words, TimescaleDB exposes what look like regular tables, but are actua
 
 ## "Postgres is eating the database world"
 Do read for an opinionated sales pitch for Postgres [https://pigsty.io/blog/pg/pg-eat-db-world/](https://pigsty.io/blog/pg/pg-eat-db-world/)
+
+## 28 Jan 2025,  Microsoft has launched a new open-source document database platform built on PostgreSQL
+
+Microsoft has launched a new open-source document database platform built on PostgreSQL. This platform offers no commercial licensing fees and enhances performance with BSON support. **Developers can use FerretDB 2.0 for a MongoDB-like experience with improved performance.**
+
+### Key Features of Microsoft’s Open Source Document Database
+The platform includes two custom PostgreSQL extensions designed to optimize performance and efficiency:
+
+1. **Pg_documentdb_core:** This extension optimises PostgreSQL for BSON (Binary JavaScript Object Notation) handling. BSON is a binary-encoded format of JSON documents, making it much faster to store and retrieve data.
+2. **Pg_documentdb_api:** This extension adds the ability to perform CRUD operations (Create, Read, Update, Delete), manage queries, and index your data.
+
+
+Together, these extensions provide the foundation for building document-based applications on top of a relational system.
