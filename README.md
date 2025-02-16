@@ -12,7 +12,7 @@ First a Quick Summary of the differences
 | ACID compliant only with **InnoDB and NDB Cluster storage engines**| Always ACID compliant |
 | has B-tree and R-tree index | Supports multiple index types like expression indexes, partial indexes, and hash indexes along with trees.|
 | does not offer MVCC | supports MVCC, which creates **duplicate copies of records to safely read and update the same data in parallel** |
-| 
+
 
 As is obvious from the table above, Postgres is more suited for enterprise-grade application with frequent write operations and complex queries, while MySQL has slightly better performance in frequent read scenarios.
 
