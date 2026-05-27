@@ -100,12 +100,12 @@ since Postgres 8.3, they have implemented a feature called Heap Only Tuples (HOT
 * PostgreSQL, on the other hand, traditionally uses a process-based model, where each connection is handled by a separate operating system process. These processes are managed by the PostgreSQL server and are responsible for executing queries and managing transactional state. However, creating new processes can be more resource-intensive than creating threads, so PostgreSQL typically has a higher memory overhead per connection compared to MySQL. 
 
 
-### Postgres MVCC 
+## Postgres MVCC 
 Postgres's MVCC operates on an append-only model—very similar to how an LSM-Tree (Log-Structured Merge-tree) handles writes in databases like Cassandra or RocksDB.
 
 Here is exactly how Postgres handles high-write workloads, why it causes massive "bloat," and how it contrasts with MySQL.
 
-1. The Core Issue: "Pay Later" vs. "Pay Now"
+### 1. The Core Issue: "Pay Later" vs. "Pay Now"
 ```
 PostgreSQL (Append-Only / Pay Later)
 [ Page 1 ] ───► Old Tuple (Dead) ───► New Tuple (Active)
@@ -119,23 +119,22 @@ MySQL / InnoDB (In-Place / Pay Now)
 * Result: Slower writes due to processing, but zero table bloat.
 ```
 
-PostgreSQL: The "Pay Later" Append-Only Model
+##### PostgreSQL: The "Pay Later" Append-Only Model
 When you run an UPDATE in Postgres, it does not overwrite the data. It copies the entire row, applies the change, and appends a brand new row (tuple) onto the disk page. The old row is marked as "dead."
 
-The Good: Writes are incredibly fast because Postgres just dumps data sequentially into memory and writes to the WAL (Write-Ahead Log).
+The Good: Writes are incredibly fast because Postgres just dumps data sequentially into memory and writes to the WAL (Write-Ahead Log).  
 The Bad: It creates massive Table Bloat. If you update a single row 50,000 times, you physically create 50,000 dead tuples.
 
-MySQL (InnoDB): The "Pay Now" In-Place Model
+##### MySQL (InnoDB): The "Pay Now" In-Place Model
 MySQL updates data in-place. It overwrites the row directly on the data page. To preserve multi-version isolation, it copies only the modified columns into a separate Undo Log.
 
-The Good: No table bloat. The table size remains tightly constrained.
-
+The Good: No table bloat. The table size remains tightly constrained.  
 The Bad: Writes are slower because MySQL has to do the structural work up front (stashing to Undo log, writing Redo log, updating the page). Long-running reads can also slow down because they have to reconstruct history by traversing the undo log chain backwards.
 
-2. How Postgres Mitigates the High-Write Dilemma
+### 2. How Postgres Mitigates the High-Write Dilemma
 Because Postgres engineers knew that high updates would kill performance, they built two native defense mechanisms.
 
-Defense 1: HOT (Heap-Only Tuples) Optimization
+#### Defense 1: HOT (Heap-Only Tuples) Optimization
 Postgres avoids rewriting index pointers on every update through an optimization called HOT.
 
 If you update a row, and:
@@ -145,7 +144,7 @@ Postgres will not create a new index pointer. Instead, it creates a lightweight 
 
 Furthermore, any subsequent SELECT query that hits that page will silently prune the dead tuple on the spot. This means a lot of garbage collection happens instantly during standard read traffic without needing the global VACUUM process.
 
-Defense 2: Aggressive Autovacuum Tuning
+#### Defense 2: Aggressive Autovacuum Tuning
 For high-write scenarios (like logging millions of camera transactions at Wemolo), the default Postgres autovacuum settings are way too passive. At scale, Staff Engineers aggressively tune the autovacuum daemon to run continuously and lightly, rather than periodically and heavily.
 
 In a high-update environment, you tweak these settings in postgresql.conf:
@@ -159,7 +158,7 @@ autovacuum_max_workers = 6             # Run more parallel worker threads
 autovacuum_vacuum_cost_limit = 2000    # Let workers do more I/O before sleeping
 ```
 
-3. If you face the issue "Even with HOT and tuned Autovacuum, our update traffic is still causing unacceptable table bloat. What do you do?"
+#### 3. If you face the issue "Even with HOT and tuned Autovacuum, our update traffic is still causing unacceptable table bloat. What do you do?"
  - Shun "In-Place" Relational Updates: If you are updating a status column constantly (e.g., status = 'processing' -> 'completed'), don't update. Use an Append-Only Event Ledger pattern. Treat Postgres like a NoSQL event log. Just write an INSERT for every state change, and query the latest record using a window function or a dedicated materialized view.
 - Vertical Partitioning (Split the Table): If you have a table with 50 columns, but only 2 of those columns are updated frequently, split those 2 columns out into a separate 1-to-1 extension table. This keeps the primary, massive text columns from bloating, restricting the MVCC duplication to a tiny, fast-moving secondary table.
 
