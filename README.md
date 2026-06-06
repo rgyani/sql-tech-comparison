@@ -145,7 +145,7 @@ Postgres will not create a new index pointer. Instead, it creates a lightweight 
 Furthermore, any subsequent SELECT query that hits that page will silently prune the dead tuple on the spot. This means a lot of garbage collection happens instantly during standard read traffic without needing the global VACUUM process.
 
 #### Defense 2: Aggressive Autovacuum Tuning
-For high-write scenarios (like logging millions of camera transactions at Wemolo), the default Postgres autovacuum settings are way too passive. At scale, Staff Engineers aggressively tune the autovacuum daemon to run continuously and lightly, rather than periodically and heavily.
+For high-write scenarios, the default Postgres autovacuum settings are way too passive. At scale, we aggressively tune the autovacuum daemon to run continuously and lightly, rather than periodically and heavily.
 
 In a high-update environment, you tweak these settings in postgresql.conf:
 ```
