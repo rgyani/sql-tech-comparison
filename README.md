@@ -52,18 +52,70 @@ A Page (or Block) is a fixed-size chunk of memory (typically **8KB in Postgres**
 
 ### Step-by-Step: Looking up a Value (e.g., ID = 42)
 1. Step 1: Read the Root Page (The top of the tree).
-   aThe database engine looks at the index and loads the very first page, known as the Root Page (this page is almost always already sitting in RAM cache).  
-Inside this page is a sorted list of keys and page numbers.
+   * The database engine looks at the index and loads the very first page, known as the Root Page (this page is almost always already sitting in RAM cache).
+   * Inside this page is a sorted list of keys and page numbers.
+   * The engine scans this page to see where 42 falls. For example: "Keys 1 to 50 are on Page#204; keys 51 to 100 are on Page#205."
+   * The engine now knows it needs to look at Page#204.
+2. Step 2: Read the child/leaf page
+   * The engine fetches Page#204 from RAM (or pulls it from the disk if it’s not cached).
+   * Because this is a B+Tree, Page#204 is a Leaf Page.
+   * The engine looks inside Page#204, scans the data array inside it, finds the key 42, and immediately grabs the corresponding data (the full row in MySQL, or the ctid pointer in Postgres).
+   * **Binary Search Inside the Page:** Once a page is loaded into memory, searching inside that specific page is incredibly fast because the keys inside that page are strictly ordered. The database uses binary search to find the exact slot in microseconds.
 
-The engine scans this page to see where 42 falls. For example: "Keys 1 to 50 are on Page #204; keys 51 to 100 are on Page #205."
+### Step-by-Step: Writing a new Row Value (e.g., ID = 42)
+1. Step 1. Traverse the Tree: 
+   * Just like the lookup, the engine reads the Root Page, sees that 43 belongs on Page#204, and loads Page#204 into RAM.
+2. Step 2: What happens if the page is already full? Because pages have a fixed size (e.g., 8KB or 16KB), a database can't just keep stuffing data into them forever.
+   * Shift and Insert: The engine sees there is still empty space on Page#204. 
+      - Because keys must stay strictly sorted, it shifts 44 and 45 over slightly, drops 43 into its correct slot, and writes the page back to disk/cache.
+   * The "Page Split": The engine sees the page is full
+      - The Database Allocates a Brand New Page (#206) and splits the data 50/50:
+         ```
+         [ Page #204 ] ──► [ 40 | 41 | 42 ]
+         [ Page #206 ] ──► [ 43 | 44 | 45 ]  <-- 43 safely inserted here
+         ```
+      - The Parent/Root Page is updated to point to both pages:
+         ```
+         [ Root Page ] ──► Points to Page#204 (for keys <= 42) 
+                       ──► Points to Page #206 (for keys >= 43)
+         ```
 
-The engine now knows it needs to look at Page #204.
+### This is reason why we prefer auto-increment IDs vs UUId for primary keys
+* With auto-increment Ids, New inserts always go at the very end of the last page. Pages fill up sequentially, and when a page splits, it only ever splits at the very edge.
+* If you use random UUIDs, a new insert could target a page right in the middle of your tree. If that page is full, it forces a random page split, shattering performance and leaving pages only 50% full (causing fragmentation and wasting space).
 
+
+### How Postgres and MySQL differ
+#### 1. Postgres: The Two-Pile System
+Postgres keeps its Index boxes completely separate from its Data boxes.
+* **The Heap Pages (Data Pile):** You have a giant pile of boxes that contain only raw rows of data. They are in no particular order. This is called the Heap.
+* **The Index Pages (B+Tree Pile):** You have a separate pile of boxes arranged as a B+Tree.
+* **How they connect:** You open an Index box, find your key, and it gives you a ctid (a slip of paper). That slip of paper says: "Go over to the Heap pile, open Page Box #500, and look at row Slot #3."
+
+```
+[ Index Page Box ] ──► Contains: "ID 42 is in Data Box #500, Slot 3"
+                            │
+                            ▼
+[ Heap Data Page Box #500 ] ──► Contains: [ Actual Row Data for ID 42 ]
+```
+#### 2. MySQL: The All-in-One System
+MySQL (InnoDB) decides that having two separate piles of boxes is a waste of time for the primary key. It merges them.
+* **The Clustered Index Pages:** MySQL takes the raw data rows and stuffs them directly inside the leaf boxes of the B+Tree itself.
+* **How it works:** You traverse the B+Tree boxes. When you get to the final leaf Page Box, you don't find a note telling you to go look at another box. You open that page box, and the actual data row is sitting right inside it.
+```
+[ Primary Key Leaf Page Box ] ──► Contains: [ Actual Row Data for ID 42 ] 
+                                  (No next step needed!)
+```
+
+#### To Put It Simply:
+* Does Postgres use pages? Yes. It reads an Index Page, gets a pointer, and then reads a Heap Data Page.
+* Does MySQL use pages? Yes. But for the primary key, the Index Page is the Data Page. Finding the right page means you have found the data.
 
 Remember this is just a bird's-eye view.  
 Both MySQL and PostgreSQL support various types of indexes, including B-tree, hash indexes, and full-text indexes. However, PostgreSQL offers more advanced indexing options, such as GiST (Generalized Search Tree) and GIN (Generalized Inverted Index) indexes, which are useful for indexing complex data types like geometric data, text search, and arrays.
 
 
+## Secondary Indexes
 ### MySQL
 In a MySQL database, we *must* have a primary index, whose value is the full row.  
 If you do a lookup *for a key in the primary index* you find the page where the key lives (O(logN) operation) and its value which is the full row of that key, no more I/Os are necessary to get additional columns.
